@@ -139,7 +139,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// and set impl_version to 0. If only runtime
 	// implementation changes and behavior does not, then leave spec_version as
 	// is and increment impl_version.
-	spec_version: 268,
+	spec_version: 278,
 	impl_version: 0,
 	apis: RUNTIME_API_VERSIONS,
 	transaction_version: 2,
@@ -553,7 +553,7 @@ pallet_staking_reward_curve::build! {
 }
 
 parameter_types! {
-	pub const SessionsPerEra: sp_staking::SessionIndex = 6;
+	pub const SessionsPerEra: sp_staking::SessionIndex = 1;
 	pub const BondingDuration: sp_staking::EraIndex = 24 * 28;
 	pub const SlashDeferDuration: sp_staking::EraIndex = 24 * 7; // 1/4 the bonding duration.
 	pub const RewardCurve: &'static PiecewiseLinear<'static> = &REWARD_CURVE;
@@ -1222,7 +1222,16 @@ parameter_types! {
 	pub const DefaultDepositLimit: Balance = deposit(1024, 1024 * 1024);
 	pub Schedule: pallet_contracts::Schedule<Runtime> = Default::default();
 }
-
+parameter_types! {
+	pub const DeletionQueueDepth: u32 = 128;
+	// The lazy deletion runs inside on_initialize.
+	pub DeletionWeightLimit: Weight = RuntimeBlockWeights::get()
+		.per_class
+		.get(DispatchClass::Normal)
+		.max_total
+		.unwrap_or(RuntimeBlockWeights::get().max_block);
+	
+}
 impl pallet_contracts::Config for Runtime {
 	type Time = Timestamp;
 	type Randomness = RandomnessCollectiveFlip;
@@ -1238,7 +1247,9 @@ impl pallet_contracts::Config for Runtime {
 	type CallFilter = Nothing;
 	type DepositPerItem = DepositPerItem;
 	type DepositPerByte = DepositPerByte;
-	type DefaultDepositLimit = DefaultDepositLimit;
+	type DeletionQueueDepth = DeletionQueueDepth;
+	type DeletionWeightLimit = DeletionWeightLimit;
+	// type DefaultDepositLimit = DefaultDepositLimit;
 	type CallStack = [pallet_contracts::Frame<Self>; 5];
 	type WeightPrice = pallet_transaction_payment::Pallet<Self>;
 	type WeightInfo = pallet_contracts::weights::SubstrateWeight<Self>;
@@ -2211,7 +2222,7 @@ impl_runtime_apis! {
 		}
 	}
 
-	impl pallet_contracts::ContractsApi<Block, AccountId, Balance, BlockNumber, Hash, EventRecord> for Runtime
+	impl pallet_contracts::ContractsApi<Block, AccountId, Balance, BlockNumber, Hash> for Runtime
 	{
 		fn call(
 			origin: AccountId,
@@ -2220,7 +2231,7 @@ impl_runtime_apis! {
 			gas_limit: Option<Weight>,
 			storage_deposit_limit: Option<Balance>,
 			input_data: Vec<u8>,
-		) -> pallet_contracts_primitives::ContractExecResult<Balance, EventRecord> {
+		) -> pallet_contracts_primitives::ContractExecResult<Balance> {
 			let gas_limit = gas_limit.unwrap_or(RuntimeBlockWeights::get().max_block);
 			Contracts::bare_call(
 				origin,
@@ -2229,9 +2240,10 @@ impl_runtime_apis! {
 				gas_limit,
 				storage_deposit_limit,
 				input_data,
-				pallet_contracts::DebugInfo::UnsafeDebug,
-				pallet_contracts::CollectEvents::UnsafeCollect,
-				pallet_contracts::Determinism::Enforced,
+				// pallet_contracts::DebugInfo::UnsafeDebug,
+				// pallet_contracts::CollectEvents::UnsafeCollect,
+				true,
+				pallet_contracts::Determinism::Deterministic,
 			)
 		}
 
@@ -2243,7 +2255,7 @@ impl_runtime_apis! {
 			code: pallet_contracts_primitives::Code<Hash>,
 			data: Vec<u8>,
 			salt: Vec<u8>,
-		) -> pallet_contracts_primitives::ContractInstantiateResult<AccountId, Balance, EventRecord>
+		) -> pallet_contracts_primitives::ContractInstantiateResult<AccountId, Balance>
 		{
 			let gas_limit = gas_limit.unwrap_or(RuntimeBlockWeights::get().max_block);
 			Contracts::bare_instantiate(
@@ -2254,8 +2266,7 @@ impl_runtime_apis! {
 				code,
 				data,
 				salt,
-				pallet_contracts::DebugInfo::UnsafeDebug,
-				pallet_contracts::CollectEvents::UnsafeCollect,
+				true,
 			)
 		}
 

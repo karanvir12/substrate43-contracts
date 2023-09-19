@@ -1,6 +1,6 @@
 // This file is part of Substrate.
 
-// Copyright (C) Parity Technologies (UK) Ltd.
+// Copyright (C) 2018-2022 Parity Technologies (UK) Ltd.
 // SPDX-License-Identifier: Apache-2.0
 
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,6 +23,7 @@ use frame_support::{
 	weights::Weight,
 	DefaultNoBound,
 };
+use sp_core::crypto::UncheckedFrom;
 use sp_runtime::traits::Zero;
 use sp_std::marker::PhantomData;
 
@@ -85,7 +86,10 @@ pub struct GasMeter<T: Config> {
 	tokens: Vec<ErasedToken>,
 }
 
-impl<T: Config> GasMeter<T> {
+impl<T: Config> GasMeter<T>
+where
+	T::AccountId: UncheckedFrom<<T as frame_system::Config>::Hash> + AsRef<[u8]>,
+{
 	pub fn new(gas_limit: Weight) -> Self {
 		GasMeter {
 			gas_limit,
@@ -153,8 +157,8 @@ impl<T: Config> GasMeter<T> {
 	/// Returns `OutOfGas` if there is not enough gas or addition of the specified
 	/// amount of gas has lead to overflow. On success returns `Proceed`.
 	///
-	/// NOTE that amount isn't consumed if there is not enough gas. This is considered
-	/// safe because we always charge gas before performing any resource-spending action.
+	/// NOTE that amount is always consumed, i.e. if there is not enough gas
+	/// then the counter will be set to zero.
 	#[inline]
 	pub fn charge<Tok: Token<T>>(&mut self, token: Tok) -> Result<ChargedAmount, DispatchError> {
 		#[cfg(test)]
@@ -275,19 +279,19 @@ mod tests {
 	struct SimpleToken(u64);
 	impl Token<Test> for SimpleToken {
 		fn weight(&self) -> Weight {
-			Weight::from_parts(self.0, 0)
+			Weight::from_ref_time(self.0)
 		}
 	}
 
 	#[test]
 	fn it_works() {
-		let gas_meter = GasMeter::<Test>::new(Weight::from_parts(50000, 0));
-		assert_eq!(gas_meter.gas_left(), Weight::from_parts(50000, 0));
+		let gas_meter = GasMeter::<Test>::new(Weight::from_ref_time(50000));
+		assert_eq!(gas_meter.gas_left(), Weight::from_ref_time(50000));
 	}
 
 	#[test]
 	fn tracing() {
-		let mut gas_meter = GasMeter::<Test>::new(Weight::from_parts(50000, 0));
+		let mut gas_meter = GasMeter::<Test>::new(Weight::from_ref_time(50000));
 		assert!(!gas_meter.charge(SimpleToken(1)).is_err());
 
 		let mut tokens = gas_meter.tokens().iter();
@@ -304,7 +308,7 @@ mod tests {
 	// Make sure that the gas meter does not charge in case of overcharger
 	#[test]
 	fn overcharge_does_not_charge() {
-		let mut gas_meter = GasMeter::<Test>::new(Weight::from_parts(200, 0));
+		let mut gas_meter = GasMeter::<Test>::new(Weight::from_ref_time(200));
 
 		// The first charge is should lead to OOG.
 		assert!(gas_meter.charge(SimpleToken(300)).is_err());
@@ -317,7 +321,7 @@ mod tests {
 	// possible.
 	#[test]
 	fn charge_exact_amount() {
-		let mut gas_meter = GasMeter::<Test>::new(Weight::from_parts(25, 0));
+		let mut gas_meter = GasMeter::<Test>::new(Weight::from_ref_time(25));
 		assert!(!gas_meter.charge(SimpleToken(25)).is_err());
 	}
 }

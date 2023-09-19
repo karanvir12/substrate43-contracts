@@ -1,6 +1,6 @@
 // This file is part of Substrate.
 
-// Copyright (C) Parity Technologies (UK) Ltd.
+// Copyright (C) 2018-2022 Parity Technologies (UK) Ltd.
 // SPDX-License-Identifier: Apache-2.0
 
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,9 +27,6 @@ use frame_support::{
 };
 use sp_runtime::traits::Saturating;
 use sp_std::{marker::PhantomData, prelude::*};
-
-#[cfg(feature = "try-runtime")]
-use sp_runtime::TryRuntimeError;
 
 /// Performs all necessary migrations based on `StorageVersion`.
 pub struct Migration<T: Config>(PhantomData<T>);
@@ -69,7 +66,7 @@ impl<T: Config> OnRuntimeUpgrade for Migration<T> {
 	}
 
 	#[cfg(feature = "try-runtime")]
-	fn pre_upgrade() -> Result<Vec<u8>, TryRuntimeError> {
+	fn pre_upgrade() -> Result<Vec<u8>, &'static str> {
 		let version = <Pallet<T>>::on_chain_storage_version();
 
 		if version == 7 {
@@ -80,7 +77,7 @@ impl<T: Config> OnRuntimeUpgrade for Migration<T> {
 	}
 
 	#[cfg(feature = "try-runtime")]
-	fn post_upgrade(state: Vec<u8>) -> Result<(), TryRuntimeError> {
+	fn post_upgrade(state: Vec<u8>) -> Result<(), &'static str> {
 		let version = Decode::decode(&mut state.as_ref()).map_err(|_| "Cannot decode version")?;
 		post_checks::post_upgrade::<T>(version)
 	}
@@ -358,7 +355,7 @@ mod v8 {
 	}
 
 	#[cfg(feature = "try-runtime")]
-	pub fn pre_upgrade<T: Config>() -> Result<(), TryRuntimeError> {
+	pub fn pre_upgrade<T: Config>() -> Result<(), &'static str> {
 		use frame_support::traits::ReservableCurrency;
 		for (key, value) in ContractInfoOf::<T, OldContractInfo<T>>::iter() {
 			let reserved = T::Currency::reserved_balance(&key);
@@ -397,7 +394,7 @@ mod v9 {
 				initial: old.initial,
 				maximum: old.maximum,
 				code: old.code,
-				determinism: Determinism::Enforced,
+				determinism: Determinism::Deterministic,
 			})
 		});
 	}
@@ -421,7 +418,7 @@ mod post_checks {
 	type ContractInfoOf<T: Config, V> =
 		StorageMap<Pallet<T>, Twox64Concat, <T as frame_system::Config>::AccountId, V>;
 
-	pub fn post_upgrade<T: Config>(old_version: StorageVersion) -> Result<(), TryRuntimeError> {
+	pub fn post_upgrade<T: Config>(old_version: StorageVersion) -> Result<(), &'static str> {
 		if old_version < 7 {
 			return Ok(())
 		}
@@ -437,7 +434,7 @@ mod post_checks {
 		Ok(())
 	}
 
-	fn v8<T: Config>() -> Result<(), TryRuntimeError> {
+	fn v8<T: Config>() -> Result<(), &'static str> {
 		use frame_support::traits::ReservableCurrency;
 		for (key, value) in ContractInfoOf::<T, ContractInfo<T>>::iter() {
 			let reserved = T::Currency::reserved_balance(&key);
@@ -458,16 +455,16 @@ mod post_checks {
 				storage_bytes.saturating_accrue(len);
 				storage_items.saturating_accrue(1);
 			}
-			ensure!(storage_bytes == value.storage_bytes, "Storage bytes do not match.");
-			ensure!(storage_items == value.storage_items, "Storage items do not match.");
+			ensure!(storage_bytes == value.storage_bytes, "Storage bytes do not match.",);
+			ensure!(storage_items == value.storage_items, "Storage items do not match.",);
 		}
 		Ok(())
 	}
 
-	fn v9<T: Config>() -> Result<(), TryRuntimeError> {
+	fn v9<T: Config>() -> Result<(), &'static str> {
 		for value in CodeStorage::<T>::iter_values() {
 			ensure!(
-				value.determinism == Determinism::Enforced,
+				value.determinism == Determinism::Deterministic,
 				"All pre-existing codes need to be deterministic."
 			);
 		}
