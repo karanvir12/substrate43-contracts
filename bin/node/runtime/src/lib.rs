@@ -1945,10 +1945,10 @@ type Migrations = (
 	pallet_contracts::Migration<Runtime>,
 );
 
-type EventRecord = frame_system::EventRecord<
-	<Runtime as frame_system::Config>::RuntimeEvent,
-	<Runtime as frame_system::Config>::Hash,
->;
+// type EventRecord = frame_system::EventRecord<
+// 	<Runtime as frame_system::Config>::RuntimeEvent,
+// 	<Runtime as frame_system::Config>::Hash,
+// >;
 
 /// MMR helper types.
 mod mmr {
